@@ -42,7 +42,7 @@
     const ctx = canvas.getContext('2d');
     const grid = 20;
     const cells = canvas.width / grid;
-    let snake, direction, nextDirection, dot, timer, running, paused, score, lives, asked, roundQuestions, currentQuestion;
+    let snake, direction, nextDirection, dot, timer, running, paused, score, lives, asked, roundQuestions, currentQuestion, questionBank, pendingGrowth;
 
     const $ = (id) => document.getElementById(id);
     const shuffle = (items) => [...items].sort(() => Math.random() - 0.5);
@@ -53,11 +53,17 @@
       return response.json();
     }
 
-    function resetState(questions) {
+    function resetSnake() {
       snake = [{ x: 8, y: 10 }, { x: 7, y: 10 }, { x: 6, y: 10 }];
       direction = { x: 1, y: 0 };
       nextDirection = direction;
+    }
+
+    function resetState(questions) {
+      questionBank = questions;
+      resetSnake();
       score = 0; lives = 3; asked = 0; running = false; paused = false;
+      pendingGrowth = false;
       roundQuestions = shuffle(questions).slice(0, 10);
       placeDot(); updateStats(); draw();
       $('status').textContent = 'Fresh 10-question round ready.';
@@ -87,18 +93,31 @@
     function tick() {
       if (!running || paused) return;
       direction = nextDirection;
-      const head = { x: snake[0].x + direction.x, y: snake[0].y + direction.y };
-      const crashed = head.x < 0 || head.y < 0 || head.x >= cells || head.y >= cells || snake.some((part) => part.x === head.x && part.y === head.y);
-      if (crashed) {
-        lives -= 1;
-        $('status').textContent = lives ? 'Ouch! One life lost. Keep going.' : 'Round over. Start again for a new set.';
-        if (!lives) { running = false; clearInterval(timer); }
-        snake = [{ x: 8, y: 10 }, { x: 7, y: 10 }, { x: 6, y: 10 }]; direction = { x: 1, y: 0 }; nextDirection = direction;
-        updateStats(); draw(); return;
-      }
+      const head = {
+        x: (snake[0].x + direction.x + cells) % cells,
+        y: (snake[0].y + direction.y + cells) % cells
+      };
+      const caughtDot = head.x === dot.x && head.y === dot.y;
       snake.unshift(head);
-      if (head.x === dot.x && head.y === dot.y) askQuestion(); else snake.pop();
+      if (!caughtDot) snake.pop();
+      if (snake.slice(1).some((part) => part.x === head.x && part.y === head.y)) {
+        loseLife();
+        return;
+      }
+      if (caughtDot) {
+        pendingGrowth = true;
+        askQuestion();
+      }
       draw();
+    }
+
+    function loseLife() {
+      lives = Math.max(0, lives - 1);
+      $('status').textContent = lives ? 'Self-contact! One life lost. Restarting in the middle.' : 'Round over. Press Start round to restart with 3 lives.';
+      if (!lives) { running = false; clearInterval(timer); }
+      resetSnake();
+      pendingGrowth = false;
+      updateStats(); draw();
     }
 
     function askQuestion() {
@@ -123,7 +142,11 @@
       document.querySelectorAll('#options button').forEach((button) => button.disabled = true);
       selected.classList.add(correct ? 'correct' : 'incorrect');
       if (correct) { score += 10; $('feedback').textContent = 'Correct! The wound-care pathway advances.'; }
-      else { $('feedback').textContent = 'Not quite. Review the learning centre and keep healing.'; }
+      else {
+        if (pendingGrowth) snake.pop();
+        $('feedback').textContent = 'Not quite. Review the learning centre and keep healing.';
+      }
+      pendingGrowth = false;
       $('continue').hidden = false;
       updateStats();
     }
@@ -154,8 +177,14 @@
     });
 
     $('continue').onclick = continueGame;
-    $('start').onclick = () => { if (!running) { running = true; paused = false; clearInterval(timer); timer = setInterval(tick, 120); $('status').textContent = 'Go catch a clinical question!'; } };
-    $('restart').onclick = async () => resetState(await loadQuestions());
+    $('start').onclick = async () => {
+      if (!running) {
+        if (!questionBank) questionBank = await loadQuestions();
+        if (lives <= 0 || asked >= 10) resetState(questionBank);
+        running = true; paused = false; clearInterval(timer); timer = setInterval(tick, 120); $('status').textContent = 'Go catch a clinical question!';
+      }
+    };
+    $('restart').onclick = async () => resetState(questionBank || await loadQuestions());
 
     loadQuestions().then(resetState).catch((error) => { $('status').textContent = error.message; draw(); });
   </script>
