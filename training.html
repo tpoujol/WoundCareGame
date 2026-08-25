@@ -20,7 +20,34 @@
     <section id="articles" class="lesson-grid" aria-live="polite"></section>
   </main>
   <script>
-    const lessons = ['content/wound-healing-introduction.md'];
+    const contentFolder = 'content/';
+
+    function resolveUrl(path) {
+      return new URL(path, window.location.href).href;
+    }
+
+    function isMarkdownArticle(href) {
+      try {
+        const url = new URL(href, resolveUrl(contentFolder));
+        return url.origin === window.location.origin
+          && url.pathname.startsWith(new URL(contentFolder, window.location.href).pathname)
+          && url.pathname.toLowerCase().endsWith('.md');
+      } catch {
+        return false;
+      }
+    }
+
+    async function findMarkdownArticles() {
+      const response = await fetch(contentFolder);
+      if (!response.ok) throw new Error(`Could not inspect ${contentFolder}`);
+
+      const directoryHtml = await response.text();
+      const directoryDocument = new DOMParser().parseFromString(directoryHtml, 'text/html');
+      return [...directoryDocument.querySelectorAll('a[href]')]
+        .map((link) => new URL(link.getAttribute('href'), response.url).href)
+        .filter(isMarkdownArticle)
+        .sort((a, b) => a.localeCompare(b));
+    }
 
     function escapeHtml(text) {
       return text.replace(/[&<>"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[char]));
@@ -55,6 +82,9 @@
     async function loadLessons() {
       const container = document.getElementById('articles');
       try {
+        const lessons = await findMarkdownArticles();
+        if (!lessons.length) throw new Error(`No markdown articles found in ${contentFolder}`);
+
         const articles = await Promise.all(lessons.map(async (lesson) => {
           const response = await fetch(lesson);
           if (!response.ok) throw new Error(`Could not load ${lesson}`);
