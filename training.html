@@ -19,54 +19,25 @@
     </section>
     <section id="articles" class="lesson-grid" aria-live="polite"></section>
   </main>
-  <script id="lesson-manifest" type="application/json">
-    [
-      {% assign markdown_lessons = site.static_files | where_exp: "file", "file.path contains '/content/'" | where: "extname", ".md" | sort: "path" %}
-      {% for lesson in markdown_lessons %}
-        "{{ lesson.path | relative_url }}"{% unless forloop.last %},{% endunless %}
-      {% endfor %}
-    ]
-  </script>
   <script>
-    const contentFolder = 'content/';
+    const articlesListUrl = 'content/articles.json';
 
-    function readLessonManifest() {
-      try {
-        const manifest = JSON.parse(document.getElementById('lesson-manifest').textContent);
-        return manifest.filter((lesson) => lesson.toLowerCase().endsWith('.md'));
-      } catch {
-        return [];
-      }
-    }
-
-    function resolveUrl(path) {
-      return new URL(path, window.location.href).href;
-    }
-
-    function isMarkdownArticle(href) {
-      try {
-        const url = new URL(href, resolveUrl(contentFolder));
-        return url.origin === window.location.origin
-          && url.pathname.startsWith(new URL(contentFolder, window.location.href).pathname)
-          && url.pathname.toLowerCase().endsWith('.md');
-      } catch {
-        return false;
-      }
+    function normalizeArticleUrl(article) {
+      const relativeUrl = typeof article === 'string' ? article : article?.url;
+      if (!relativeUrl || !relativeUrl.toLowerCase().endsWith('.md')) return null;
+      return new URL(relativeUrl, new URL(articlesListUrl, window.location.href)).href;
     }
 
     async function findMarkdownArticles() {
-      const manifestLessons = readLessonManifest();
-      if (manifestLessons.length) return manifestLessons;
+      const response = await fetch(articlesListUrl);
+      if (!response.ok) throw new Error(`Could not load ${articlesListUrl}`);
 
-      const response = await fetch(contentFolder);
-      if (!response.ok) throw new Error(`Could not inspect ${contentFolder}`);
+      const articles = await response.json();
+      if (!Array.isArray(articles)) throw new Error(`${articlesListUrl} must contain an array of articles`);
 
-      const directoryHtml = await response.text();
-      const directoryDocument = new DOMParser().parseFromString(directoryHtml, 'text/html');
-      return [...directoryDocument.querySelectorAll('a[href]')]
-        .map((link) => new URL(link.getAttribute('href'), response.url).href)
-        .filter(isMarkdownArticle)
-        .sort((a, b) => a.localeCompare(b));
+      return articles
+        .map(normalizeArticleUrl)
+        .filter(Boolean);
     }
 
     function escapeHtml(text) {
@@ -103,7 +74,7 @@
       const container = document.getElementById('articles');
       try {
         const lessons = await findMarkdownArticles();
-        if (!lessons.length) throw new Error(`No markdown articles found in ${contentFolder}`);
+        if (!lessons.length) throw new Error(`No markdown articles found in ${articlesListUrl}`);
 
         const articles = await Promise.all(lessons.map(async (lesson) => {
           const response = await fetch(lesson);
