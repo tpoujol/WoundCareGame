@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>UrgoMedical WoundCare Quest</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <div class="brand"><span class="logo-mark">＋</span> UrgoMedical WoundCare Quest</div>
+    <nav><a href="training.html">Learning Centre</a><a href="snake.html">Snake Challenge</a></nav>
+  </header>
+  <main>
+    <section class="hero">
+      <div class="panel">
+        <span class="badge">Gamified wound-care learning</span>
+        <h1>Heal knowledge, level by level.</h1>
+        <p class="lead">Welcome to an upbeat learning application for wound care teams. Explore the science of healing, then test your reflexes and clinical judgement in a fast snake game.</p>
+      </div>
+      <div class="panel">
+        <h2>Your mission</h2>
+        <p>Build confidence around tissue types, healing phases, infection signs, MMP balance, and major wound-care brands — one bite-sized activity at a time.</p>
+      </div>
+    </section>
+    <section class="choice-grid" aria-label="Choose an activity">
+      <article class="card">
+        <div class="icon">📚</div>
+        <h2>Learning Centre</h2>
+        <p>Start with a friendly introduction to wound healing, the four core phases, and why matrix metalloproteinases matter.</p>
+        <a href="training.html">Start learning</a>
+      </article>
+      <article class="card">
+        <div class="icon">🐍</div>
+        <h2>Snake Challenge</h2>
+        <p>Catch wound-care dots, answer quiz questions, and complete a 10-question round selected from a larger question bank.</p>
+        <a href="snake.html">Play the game</a>
+      </article>
+    </section>
+  </main>
+  <script>
+    document.querySelectorAll('.card').forEach((card) => card.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') card.querySelector('a').click();
+    }));
+  </script>
+</body>
+</html>

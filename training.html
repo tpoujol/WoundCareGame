@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Learning Centre | WoundCare Quest</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <div class="brand"><span class="logo-mark">＋</span> Learning Centre</div>
+    <nav><a href="index.html">Home</a><a href="snake.html">Snake Challenge</a></nav>
+  </header>
+  <main>
+    <section class="panel">
+      <span class="badge">Editable Markdown training</span>
+      <h1>Learning Centre</h1>
+      <p class="lead">These lessons are loaded from standalone markdown files so clinical educators can update content without changing the web app code.</p>
+    </section>
+    <section id="articles" class="lesson-grid" aria-live="polite"></section>
+  </main>
+  <script>
+    const lessons = ['content/wound-healing-introduction.md'];
+
+    function escapeHtml(text) {
+      return text.replace(/[&<>"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[char]));
+    }
+
+    function inlineMarkdown(text) {
+      return escapeHtml(text)
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*(.*?)\*/g, '<em>$1</em>');
+    }
+
+    function markdownToHtml(markdown) {
+      const lines = markdown.split('\n');
+      let html = '';
+      let inList = false;
+      lines.forEach((line) => {
+        if (line.startsWith('- ')) {
+          if (!inList) { html += '<ul>'; inList = true; }
+          html += `<li>${inlineMarkdown(line.slice(2))}</li>`;
+          return;
+        }
+        if (inList) { html += '</ul>'; inList = false; }
+        if (line.startsWith('# ')) html += `<h2>${inlineMarkdown(line.slice(2))}</h2>`;
+        else if (line.startsWith('## ')) html += `<h3>${inlineMarkdown(line.slice(3))}</h3>`;
+        else if (line.startsWith('> ')) html += `<blockquote>${inlineMarkdown(line.slice(2))}</blockquote>`;
+        else if (line.trim()) html += `<p>${inlineMarkdown(line)}</p>`;
+      });
+      if (inList) html += '</ul>';
+      return html;
+    }
+
+    async function loadLessons() {
+      const container = document.getElementById('articles');
+      try {
+        const articles = await Promise.all(lessons.map(async (lesson) => {
+          const response = await fetch(lesson);
+          if (!response.ok) throw new Error(`Could not load ${lesson}`);
+          return markdownToHtml(await response.text());
+        }));
+        container.innerHTML = articles.map((article) => `<article class="article">${article}</article>`).join('');
+      } catch (error) {
+        container.innerHTML = `<article class="article"><h2>Lesson unavailable</h2><p>${escapeHtml(error.message)}</p><p>Run this app through a local web server so markdown files can be fetched.</p></article>`;
+      }
+    }
+
+    loadLessons();
+  </script>
+</body>
+</html>
