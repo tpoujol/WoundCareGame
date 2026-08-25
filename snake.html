@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Snake Challenge | WoundCare Quest</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <div class="brand"><span class="logo-mark">＋</span> Snake Challenge</div>
+    <nav><a href="index.html">Home</a><a href="training.html">Learning Centre</a></nav>
+  </header>
+  <main class="game-layout">
+    <section>
+      <canvas id="board" width="640" height="640" aria-label="Snake wound care quiz game"></canvas>
+    </section>
+    <aside class="game-panel">
+      <span class="badge">10 questions per round</span>
+      <h1>Catch. Quiz. Heal.</h1>
+      <div class="stats">
+        <div class="stat"><span>Score</span><strong id="score">0</strong></div>
+        <div class="stat"><span>Asked</span><strong id="asked">0/10</strong></div>
+        <div class="stat"><span>Lives</span><strong id="lives">3</strong></div>
+      </div>
+      <p>Use arrow keys or WASD. Each dot pauses the snake and launches a wound-care question with shuffled answer options.</p>
+      <button id="start">Start round</button>
+      <button id="restart" class="secondary">New questions</button>
+      <p id="status" class="feedback">Ready when you are.</p>
+    </aside>
+  </main>
+  <div id="questionBox" class="question-box" role="dialog" aria-modal="true" aria-labelledby="questionText">
+    <div class="question-card">
+      <h2 id="questionText"></h2>
+      <div id="options" class="options"></div>
+      <p id="feedback" class="feedback"></p>
+      <button id="continue" class="secondary" hidden>Continue</button>
+    </div>
+  </div>
+  <script>
+    const canvas = document.getElementById('board');
+    const ctx = canvas.getContext('2d');
+    const grid = 20;
+    const cells = canvas.width / grid;
+    let snake, direction, nextDirection, dot, timer, running, paused, score, lives, asked, roundQuestions, currentQuestion;
+
+    const $ = (id) => document.getElementById(id);
+    const shuffle = (items) => [...items].sort(() => Math.random() - 0.5);
+
+    async function loadQuestions() {
+      const response = await fetch('data/questions.json');
+      if (!response.ok) throw new Error('Question bank could not be loaded.');
+      return response.json();
+    }
+
+    function resetState(questions) {
+      snake = [{ x: 8, y: 10 }, { x: 7, y: 10 }, { x: 6, y: 10 }];
+      direction = { x: 1, y: 0 };
+      nextDirection = direction;
+      score = 0; lives = 3; asked = 0; running = false; paused = false;
+      roundQuestions = shuffle(questions).slice(0, 10);
+      placeDot(); updateStats(); draw();
+      $('status').textContent = 'Fresh 10-question round ready.';
+    }
+
+    function placeDot() {
+      do {
+        dot = { x: Math.floor(Math.random() * cells), y: Math.floor(Math.random() * cells) };
+      } while (snake.some((part) => part.x === dot.x && part.y === dot.y));
+    }
+
+    function draw() {
+      ctx.fillStyle = '#f8fff8'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.strokeStyle = '#e1eef8';
+      for (let i = 0; i <= cells; i++) {
+        ctx.beginPath(); ctx.moveTo(i * grid, 0); ctx.lineTo(i * grid, canvas.height); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0, i * grid); ctx.lineTo(canvas.width, i * grid); ctx.stroke();
+      }
+      ctx.fillStyle = '#ff6b6b';
+      ctx.beginPath(); ctx.arc(dot.x * grid + 10, dot.y * grid + 10, 8, 0, Math.PI * 2); ctx.fill();
+      snake.forEach((part, index) => {
+        ctx.fillStyle = index === 0 ? '#16324f' : '#00a6a6';
+        ctx.fillRect(part.x * grid + 2, part.y * grid + 2, grid - 4, grid - 4);
+      });
+    }
+
+    function tick() {
+      if (!running || paused) return;
+      direction = nextDirection;
+      const head = { x: snake[0].x + direction.x, y: snake[0].y + direction.y };
+      const crashed = head.x < 0 || head.y < 0 || head.x >= cells || head.y >= cells || snake.some((part) => part.x === head.x && part.y === head.y);
+      if (crashed) {
+        lives -= 1;
+        $('status').textContent = lives ? 'Ouch! One life lost. Keep going.' : 'Round over. Start again for a new set.';
+        if (!lives) { running = false; clearInterval(timer); }
+        snake = [{ x: 8, y: 10 }, { x: 7, y: 10 }, { x: 6, y: 10 }]; direction = { x: 1, y: 0 }; nextDirection = direction;
+        updateStats(); draw(); return;
+      }
+      snake.unshift(head);
+      if (head.x === dot.x && head.y === dot.y) askQuestion(); else snake.pop();
+      draw();
+    }
+
+    function askQuestion() {
+      paused = true;
+      currentQuestion = roundQuestions[asked];
+      asked += 1;
+      $('questionText').textContent = currentQuestion.question;
+      $('feedback').textContent = '';
+      $('continue').hidden = true;
+      $('options').innerHTML = '';
+      shuffle(currentQuestion.options).forEach((option) => {
+        const button = document.createElement('button');
+        button.textContent = option.text;
+        button.onclick = () => answer(option.correct, button);
+        $('options').appendChild(button);
+      });
+      $('questionBox').classList.add('active');
+      updateStats();
+    }
+
+    function answer(correct, selected) {
+      document.querySelectorAll('#options button').forEach((button) => button.disabled = true);
+      selected.classList.add(correct ? 'correct' : 'incorrect');
+      if (correct) { score += 10; $('feedback').textContent = 'Correct! The wound-care pathway advances.'; }
+      else { $('feedback').textContent = 'Not quite. Review the learning centre and keep healing.'; }
+      $('continue').hidden = false;
+      updateStats();
+    }
+
+    function continueGame() {
+      $('questionBox').classList.remove('active');
+      if (asked >= 10) {
+        running = false; clearInterval(timer);
+        $('status').textContent = `Round complete! Final score: ${score}/100.`;
+      } else { placeDot(); paused = false; }
+      draw();
+    }
+
+    function updateStats() {
+      $('score').textContent = score;
+      $('asked').textContent = `${asked}/10`;
+      $('lives').textContent = lives;
+    }
+
+    function setDirection(x, y) {
+      if (direction.x + x === 0 && direction.y + y === 0) return;
+      nextDirection = { x, y };
+    }
+
+    document.addEventListener('keydown', (event) => {
+      const keys = { ArrowUp: [0, -1], w: [0, -1], ArrowDown: [0, 1], s: [0, 1], ArrowLeft: [-1, 0], a: [-1, 0], ArrowRight: [1, 0], d: [1, 0] };
+      if (keys[event.key]) { event.preventDefault(); setDirection(...keys[event.key]); }
+    });
+
+    $('continue').onclick = continueGame;
+    $('start').onclick = () => { if (!running) { running = true; paused = false; clearInterval(timer); timer = setInterval(tick, 120); $('status').textContent = 'Go catch a clinical question!'; } };
+    $('restart').onclick = async () => resetState(await loadQuestions());
+
+    loadQuestions().then(resetState).catch((error) => { $('status').textContent = error.message; draw(); });
+  </script>
+</body>
+</html>
